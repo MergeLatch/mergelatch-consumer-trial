@@ -1,0 +1,85 @@
+name: MergeLatch rejected event trial
+
+# A negative test. The Action under trial accepts only the pull_request event,
+# so when this workflow is started by hand (workflow_dispatch) the Action step
+# is EXPECTED to fail. This job passes only if that failure happened in the
+# expected way: status error, nothing built or scanned. Advisory trial only;
+# it scans nothing of value and is not a security gate.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rejected-event:
+    name: Action rejects a workflow_dispatch event
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The step is expected to fail. continue-on-error keeps the job running so
+      # the assertions below can inspect the failure; steps.<id>.outcome still
+      # reports the real result.
+      - name: Run the Action under an unsupported event
+        id: action
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+
+      - name: Assert that the Action rejected the event and did nothing else
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTION_OUTCOME: ${{ steps.action.outcome }}
+          ACTION_CONCLUSION: ${{ steps.action.conclusion }}
+          STATUS: ${{ steps.action.outputs.status }}
+          REVISION_CHECK: ${{ steps.action.outputs.revision-check }}
+          FINDINGS: ${{ steps.action.outputs.findings-count }}
+          INCOMPLETE: ${{ steps.action.outputs.incomplete-count }}
+          EXIT_CODE: ${{ steps.action.outputs.scanner-exit-code }}
+          SCANNED_REVISION: ${{ steps.action.outputs.scanned-revision }}
+          SCANNER_SOURCE: ${{ steps.action.outputs.scanner-source }}
+          ACTION_PINNED: ${{ steps.action.outputs.action-pinned }}
+          ACTION_REVISION: ${{ steps.action.outputs.action-revision }}
+          EXPECTED_ACTION_SHA: 2a1a514b94754b146a690cf98ef59bc649d423ff
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=Rejected event trial::$1"; exit 1; }
+          [ "${EVENT_NAME}" = workflow_dispatch ] || fail "this trial must be started by workflow_dispatch"
+          [ "${ACTION_OUTCOME}" = failure ] || fail "the Action step did not fail (outcome: ${ACTION_OUTCOME})"
+          [ "${STATUS}" = error ] || fail "status was not error"
+          [ "${REVISION_CHECK}" = not-checked ] || fail "revision-check was not not-checked"
+          [ "${FINDINGS}" = 0 ] || fail "findings were produced"
+          [ "${INCOMPLETE}" = 0 ] || fail "incomplete entries were produced"
+          [ -z "${EXIT_CODE}" ] || fail "a scanner exit code exists, so a scanner ran"
+          [ -z "${SCANNED_REVISION}" ] || fail "a scanned revision exists"
+          [ "${ACTION_PINNED}" = true ] || fail "Action was not full-SHA pinned"
+          [ "${ACTION_REVISION}" = "${EXPECTED_ACTION_SHA}" ] || fail "Action revision was not the expected full SHA"
+          # build and scan must have been skipped after the failed preparation:
+          # the Action's private state directory holds only state.json, and no
+          # build output, scanner binary path, report or scan result exists.
+          shopt -s nullglob
+          states=("${RUNNER_TEMP}"/mergelatch-*/)
+          [ "${#states[@]}" -eq 1 ] || fail "expected exactly one Action state directory, found ${#states[@]}"
+          listing="$(ls -A "${states[0]}")"
+          [ "${listing}" = state.json ] || fail "the state directory holds more than state.json"
+          [ ! -e "${RUNNER_TEMP}/mergelatch-cargo-target" ] || fail "a build directory exists"
+          grep -q '"scan_dir": null' "${states[0]}/state.json" || fail "preparation recorded a scan directory"
+          grep -q 'supports only the pull_request event' "${states[0]}/state.json" || fail "the rejection reason is not the event allowlist"
+          echo "Rejected-event assertions passed: the Action failed with status error and neither built nor scanned."
+
+      - name: Record what this trial shows
+        if: always()
+        run: |
+          {
+            echo "### MergeLatch rejected event trial"
+            echo
+            echo "Action source: \`MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff\`"
+            echo
+            echo "The Action step is expected to fail under \`workflow_dispatch\`. The job is green only if the failure was the event allowlist and nothing was built or scanned."
+          } >> "${GITHUB_STEP_SUMMARY}"
