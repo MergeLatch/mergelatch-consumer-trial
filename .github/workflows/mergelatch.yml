@@ -24,23 +24,23 @@ jobs:
 
       - name: Scan the real consumer repository
         id: repository
-        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
+        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
 
       - name: Scan the inert clean fixture
         id: clean
-        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
+        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
         with:
           scan-directory: fixtures/clean
 
       - name: Scan the inert write-all fixture
         id: finding
-        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
+        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
         with:
           scan-directory: fixtures/finding
 
       - name: Scan the inert malformed fixture
         id: incomplete
-        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
+        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
         with:
           scan-directory: fixtures/incomplete
 
@@ -60,20 +60,20 @@ jobs:
       - name: Scan a nested clean fixture with unavailable revision (expected failure)
         id: unverified_clean
         continue-on-error: true
-        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
+        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
         with:
           scan-directory: trial-unverified-clean
 
       - name: Scan a nested finding fixture with unavailable revision (expected failure)
         id: unverified_finding
         continue-on-error: true
-        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
+        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
         with:
           scan-directory: trial-unverified-finding
 
       - name: Assert that advisory outcomes and Action provenance match
         env:
-          EXPECTED_ACTION_SHA: 95bad26bc731caa913861e95f75bf2c4de3dc6b4
+          EXPECTED_ACTION_SHA: c5296cef5fd3ffc36f1b8f0649e6491050606275
           EXPECTED_MERGE_SHA: ${{ github.sha }}
           REPO_STATUS: ${{ steps.repository.outputs.status }}
           REPO_EXIT: ${{ steps.repository.outputs.scanner-exit-code }}
@@ -165,7 +165,7 @@ jobs:
       - name: Record the exact reviewed Action revision
         if: always()
         env:
-          ACTION_SHA: 95bad26bc731caa913861e95f75bf2c4de3dc6b4
+          ACTION_SHA: c5296cef5fd3ffc36f1b8f0649e6491050606275
         run: |
           {
             echo "### MergeLatch external consumer trial"
