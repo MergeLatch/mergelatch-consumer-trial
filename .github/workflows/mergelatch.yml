@@ -24,29 +24,29 @@ jobs:
 
       - name: Scan the real consumer repository
         id: repository
-        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
 
       - name: Scan the inert clean fixture
         id: clean
-        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
         with:
           scan-directory: fixtures/clean
 
       - name: Scan the inert write-all fixture
         id: finding
-        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
         with:
           scan-directory: fixtures/finding
 
       - name: Scan the inert malformed fixture
         id: incomplete
-        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
         with:
           scan-directory: fixtures/incomplete
 
       - name: Assert that advisory outcomes and Action provenance match
         env:
-          EXPECTED_ACTION_SHA: 2a1a514b94754b146a690cf98ef59bc649d423ff
+          EXPECTED_ACTION_SHA: 95bad26bc731caa913861e95f75bf2c4de3dc6b4
           EXPECTED_MERGE_SHA: ${{ github.sha }}
           REPO_STATUS: ${{ steps.repository.outputs.status }}
           REPO_EXIT: ${{ steps.repository.outputs.scanner-exit-code }}
@@ -100,7 +100,7 @@ jobs:
       - name: Record the exact reviewed Action revision
         if: always()
         env:
-          ACTION_SHA: 2a1a514b94754b146a690cf98ef59bc649d423ff
+          ACTION_SHA: 95bad26bc731caa913861e95f75bf2c4de3dc6b4
         run: |
           {
             echo "### MergeLatch external consumer trial"
