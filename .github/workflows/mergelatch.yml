@@ -24,29 +24,56 @@ jobs:
 
       - name: Scan the real consumer repository
         id: repository
-        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
 
       - name: Scan the inert clean fixture
         id: clean
-        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
         with:
           scan-directory: fixtures/clean
 
       - name: Scan the inert write-all fixture
         id: finding
-        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
         with:
           scan-directory: fixtures/finding
 
       - name: Scan the inert malformed fixture
         id: incomplete
-        uses: MergeLatch/mergelatch@2a1a514b94754b146a690cf98ef59bc649d423ff
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
         with:
           scan-directory: fixtures/incomplete
 
+      # These two directories contain only inert copies of the existing fixtures.
+      # A .git file indicates a nested checkout with no readable revision, so
+      # D-2 must fail closed instead of borrowing the parent's merge revision.
+      - name: Create inert nested checkouts with unreadable revisions
+        run: |
+          set -euo pipefail
+          mkdir trial-unverified-clean trial-unverified-finding
+          cp -R fixtures/clean/.github trial-unverified-clean/.github
+          cp -R fixtures/finding/.github trial-unverified-finding/.github
+          for dir in trial-unverified-clean trial-unverified-finding; do
+            printf 'gitdir: ../not-present\n' > "${dir}/.git"
+          done
+
+      - name: Scan a nested clean fixture with unavailable revision (expected failure)
+        id: unverified_clean
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
+        with:
+          scan-directory: trial-unverified-clean
+
+      - name: Scan a nested finding fixture with unavailable revision (expected failure)
+        id: unverified_finding
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@95bad26bc731caa913861e95f75bf2c4de3dc6b4
+        with:
+          scan-directory: trial-unverified-finding
+
       - name: Assert that advisory outcomes and Action provenance match
         env:
-          EXPECTED_ACTION_SHA: 2a1a514b94754b146a690cf98ef59bc649d423ff
+          EXPECTED_ACTION_SHA: 95bad26bc731caa913861e95f75bf2c4de3dc6b4
           EXPECTED_MERGE_SHA: ${{ github.sha }}
           REPO_STATUS: ${{ steps.repository.outputs.status }}
           REPO_EXIT: ${{ steps.repository.outputs.scanner-exit-code }}
@@ -71,6 +98,23 @@ jobs:
           INCOMPLETE_OUTCOME: ${{ steps.incomplete.outcome }}
           INCOMPLETE_SOURCE: ${{ steps.incomplete.outputs.scanner-source }}
           INCOMPLETE_ACTION_REVISION: ${{ steps.incomplete.outputs.action-revision }}
+          CLEAN_REVISION_CHECK: ${{ steps.clean.outputs.revision-check }}
+          FINDING_REVISION_CHECK: ${{ steps.finding.outputs.revision-check }}
+          INCOMPLETE_REVISION_CHECK: ${{ steps.incomplete.outputs.revision-check }}
+          UNVERIFIED_CLEAN_OUTCOME: ${{ steps.unverified_clean.outcome }}
+          UNVERIFIED_CLEAN_STATUS: ${{ steps.unverified_clean.outputs.status }}
+          UNVERIFIED_CLEAN_REVISION: ${{ steps.unverified_clean.outputs.scanned-revision }}
+          UNVERIFIED_CLEAN_CHECK: ${{ steps.unverified_clean.outputs.revision-check }}
+          UNVERIFIED_CLEAN_SOURCE: ${{ steps.unverified_clean.outputs.scanner-source }}
+          UNVERIFIED_CLEAN_PINNED: ${{ steps.unverified_clean.outputs.action-pinned }}
+          UNVERIFIED_CLEAN_ACTION_SHA: ${{ steps.unverified_clean.outputs.action-revision }}
+          UNVERIFIED_FINDING_OUTCOME: ${{ steps.unverified_finding.outcome }}
+          UNVERIFIED_FINDING_STATUS: ${{ steps.unverified_finding.outputs.status }}
+          UNVERIFIED_FINDING_CHECK: ${{ steps.unverified_finding.outputs.revision-check }}
+          UNVERIFIED_FINDING_REVISION: ${{ steps.unverified_finding.outputs.scanned-revision }}
+          UNVERIFIED_FINDING_COUNT: ${{ steps.unverified_finding.outputs.findings-count }}
+          UNVERIFIED_FINDING_SOURCE: ${{ steps.unverified_finding.outputs.scanner-source }}
+          UNVERIFIED_FINDING_ACTION_SHA: ${{ steps.unverified_finding.outputs.action-revision }}
         run: |
           set -euo pipefail
           fail() { echo "::error title=External consumer trial::$1"; exit 1; }
@@ -95,12 +139,33 @@ jobs:
           for revision in "${REPO_ACTION_REVISION}" "${CLEAN_ACTION_REVISION}" "${FINDING_ACTION_REVISION}" "${INCOMPLETE_ACTION_REVISION}"; do
             [ "${revision}" = "${EXPECTED_ACTION_SHA}" ] || fail "Action revision did not match the reviewed full commit SHA"
           done
-          echo "External consumer trial assertions passed. Advisory findings and incomplete scans still require human review."
+          # D-2: Ordinary fixture subdirectories inherit the verified merge checkout.
+          for check in "${CLEAN_REVISION_CHECK}" "${FINDING_REVISION_CHECK}" "${INCOMPLETE_REVISION_CHECK}"; do
+            [ "${check}" = matches-merge ] || fail "ordinary fixture subdirectory revision not verified"
+          done
+
+          # Both Action steps must FAIL. Their job passes only after validating the expected failures.
+          [ "${UNVERIFIED_CLEAN_OUTCOME}" = failure ] || fail "unverified clean Action step did not fail"
+          [ "${UNVERIFIED_CLEAN_STATUS}" = error ] || fail "unverified clean scan did not report error"
+          [ "${UNVERIFIED_CLEAN_CHECK}" = unavailable ] || fail "unverified clean scan was not unavailable"
+          [ -z "${UNVERIFIED_CLEAN_REVISION}" ] || fail "unverified clean scan reported a revision"
+          [ "${UNVERIFIED_CLEAN_SOURCE}" = action-checkout ] || fail "unverified clean scan source changed"
+          [ "${UNVERIFIED_CLEAN_PINNED}" = true ] || fail "unverified clean Action was not SHA-pinned"
+          [ "${UNVERIFIED_CLEAN_ACTION_SHA}" = "${EXPECTED_ACTION_SHA}" ] || fail "unverified clean Action SHA changed"
+          [ "${UNVERIFIED_FINDING_OUTCOME}" = failure ] || fail "unverified finding Action step did not fail"
+          [ "${UNVERIFIED_FINDING_STATUS}" = error ] || fail "finding concealed an unavailable revision"
+          [ "${UNVERIFIED_FINDING_CHECK}" = unavailable ] || fail "unverified finding scan was not unavailable"
+          [ -z "${UNVERIFIED_FINDING_REVISION}" ] || fail "unverified finding scan reported a revision"
+          [ "${UNVERIFIED_FINDING_COUNT}" = 1 ] || fail "unverified finding was not preserved in count"
+          [ "${UNVERIFIED_FINDING_SOURCE}" = action-checkout ] || fail "unverified finding source changed"
+          [ "${UNVERIFIED_FINDING_ACTION_SHA}" = "${EXPECTED_ACTION_SHA}" ] || fail "unverified finding Action SHA changed"
+
+          echo "External consumer D-2 assertions passed. Expected Action failures were verified; findings and incomplete scans remain advisory."
 
       - name: Record the exact reviewed Action revision
         if: always()
         env:
-          ACTION_SHA: 2a1a514b94754b146a690cf98ef59bc649d423ff
+          ACTION_SHA: 95bad26bc731caa913861e95f75bf2c4de3dc6b4
         run: |
           {
             echo "### MergeLatch external consumer trial"
