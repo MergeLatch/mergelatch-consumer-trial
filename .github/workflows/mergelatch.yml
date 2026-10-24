@@ -54,7 +54,7 @@ jobs:
           cp -R fixtures/clean/.github trial-unverified-clean/.github
           cp -R fixtures/finding/.github trial-unverified-finding/.github
           for dir in trial-unverified-clean trial-unverified-finding; do
-            printf 'gitdir: ../not-present\\n' > "${dir}/.git"
+            printf 'gitdir: ../not-present\n' > "${dir}/.git"
           done
 
       - name: Scan a nested clean fixture with unavailable revision (expected failure)
