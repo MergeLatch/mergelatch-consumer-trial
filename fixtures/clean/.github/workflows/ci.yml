@@ -1,0 +1,9 @@
+name: Inert clean fixture
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  example:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'fixture only, never executed'
