@@ -1,0 +1,8 @@
+name: Inert write-all fixture
+on: pull_request
+permissions: write-all
+jobs:
+  example:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'fixture only, never executed'
