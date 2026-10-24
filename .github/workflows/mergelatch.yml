@@ -278,7 +278,7 @@ jobs:
               home, env, state = setup("timeout", (
                   "sleep 3607 &\necho $! > %(m)s.child\n"
                   "( sleep 3607 & echo $! > %(m)s.grandchild; wait ) &\n"
-                  "echo $ > %(m)s.cargo\nwait\n") % {"m": marker})
+                  "echo $$ > %(m)s.cargo\nwait\n") % {"m": marker})
               mla.BUILD_TIMEOUT_SECONDS = 2
               started = time.monotonic()
               try:
@@ -312,7 +312,7 @@ jobs:
               print("timeout: error raised after %.1f s; cargo, child and grandchild stopped; script reaped" % elapsed)
 
               # 2. The build runs in its own session and process group.
-              home, env, state = setup("group", "awk '{print $5, $6}' /proc/$/stat > %s.groups\n" % marker)
+              home, env, state = setup("group", "awk '{print $5, $6}' /proc/$$/stat > %s.groups\n" % marker)
               mla.BUILD_TIMEOUT_SECONDS = 60
               if mla.build(env, home=home) != 0:
                   fail("the group probe build did not finish")
