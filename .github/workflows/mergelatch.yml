@@ -1,0 +1,111 @@
+name: MergeLatch external consumer trial
+
+# Only inert files are scanned; none of the fixture workflows are executed.
+# This is a disposable advisory trial, not a required security gate.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  external-consumer:
+    name: SHA-pinned advisory consumer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the proposed merge
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Scan the real consumer repository
+        id: repository
+        uses: MergeLatch/mergelatch@afc7e65d6723029c22935f82c7fc9562d5831565
+
+      - name: Scan the inert clean fixture
+        id: clean
+        uses: MergeLatch/mergelatch@afc7e65d6723029c22935f82c7fc9562d5831565
+        with:
+          scan-directory: fixtures/clean
+
+      - name: Scan the inert write-all fixture
+        id: finding
+        uses: MergeLatch/mergelatch@afc7e65d6723029c22935f82c7fc9562d5831565
+        with:
+          scan-directory: fixtures/finding
+
+      - name: Scan the inert malformed fixture
+        id: incomplete
+        uses: MergeLatch/mergelatch@afc7e65d6723029c22935f82c7fc9562d5831565
+        with:
+          scan-directory: fixtures/incomplete
+
+      - name: Assert that advisory outcomes and Action provenance match
+        env:
+          EXPECTED_ACTION_SHA: afc7e65d6723029c22935f82c7fc9562d5831565
+          EXPECTED_MERGE_SHA: ${{ github.sha }}
+          REPO_STATUS: ${{ steps.repository.outputs.status }}
+          REPO_EXIT: ${{ steps.repository.outputs.scanner-exit-code }}
+          REPO_SOURCE: ${{ steps.repository.outputs.scanner-source }}
+          REPO_PINNED: ${{ steps.repository.outputs.action-pinned }}
+          REPO_ACTION_REVISION: ${{ steps.repository.outputs.action-revision }}
+          REPO_REVISION_CHECK: ${{ steps.repository.outputs.revision-check }}
+          REPO_SCANNED_REVISION: ${{ steps.repository.outputs.scanned-revision }}
+          CLEAN_STATUS: ${{ steps.clean.outputs.status }}
+          CLEAN_EXIT: ${{ steps.clean.outputs.scanner-exit-code }}
+          CLEAN_SOURCE: ${{ steps.clean.outputs.scanner-source }}
+          CLEAN_ACTION_REVISION: ${{ steps.clean.outputs.action-revision }}
+          FINDING_STATUS: ${{ steps.finding.outputs.status }}
+          FINDING_EXIT: ${{ steps.finding.outputs.scanner-exit-code }}
+          FINDING_COUNT: ${{ steps.finding.outputs.findings-count }}
+          FINDING_OUTCOME: ${{ steps.finding.outcome }}
+          FINDING_SOURCE: ${{ steps.finding.outputs.scanner-source }}
+          FINDING_ACTION_REVISION: ${{ steps.finding.outputs.action-revision }}
+          INCOMPLETE_STATUS: ${{ steps.incomplete.outputs.status }}
+          INCOMPLETE_EXIT: ${{ steps.incomplete.outputs.scanner-exit-code }}
+          INCOMPLETE_COUNT: ${{ steps.incomplete.outputs.incomplete-count }}
+          INCOMPLETE_OUTCOME: ${{ steps.incomplete.outcome }}
+          INCOMPLETE_SOURCE: ${{ steps.incomplete.outputs.scanner-source }}
+          INCOMPLETE_ACTION_REVISION: ${{ steps.incomplete.outputs.action-revision }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=External consumer trial::$1"; exit 1; }
+          [ "${REPO_STATUS}" = clean ] || fail "consumer checkout was not clean"
+          [ "${REPO_EXIT}" = 0 ] || fail "consumer checkout scanner exit was not 0"
+          [ "${REPO_REVISION_CHECK}" = matches-merge ] || fail "consumer revision did not match the PR merge commit"
+          [ "${REPO_SCANNED_REVISION}" = "${EXPECTED_MERGE_SHA}" ] || fail "wrong merge revision scanned"
+          [ "${REPO_PINNED}" = true ] || fail "Action was not full-SHA pinned"
+          [ "${CLEAN_STATUS}" = clean ] || fail "inert clean fixture was not clean"
+          [ "${CLEAN_EXIT}" = 0 ] || fail "clean fixture scanner exit was not 0"
+          [ "${FINDING_STATUS}" = findings ] || fail "write-all fixture did not report findings"
+          [ "${FINDING_EXIT}" = 1 ] || fail "finding scanner exit was not 1"
+          [ "${FINDING_COUNT}" = 1 ] || fail "finding count was not 1"
+          [ "${FINDING_OUTCOME}" = success ] || fail "advisory findings step was not green"
+          [ "${INCOMPLETE_STATUS}" = incomplete ] || fail "malformed fixture was not incomplete"
+          [ "${INCOMPLETE_EXIT}" = 2 ] || fail "incomplete scanner exit was not 2"
+          [ "${INCOMPLETE_COUNT}" = 1 ] || fail "incomplete count was not 1"
+          [ "${INCOMPLETE_OUTCOME}" = success ] || fail "advisory incomplete step was not green"
+          for source in "${REPO_SOURCE}" "${CLEAN_SOURCE}" "${FINDING_SOURCE}" "${INCOMPLETE_SOURCE}"; do
+            [ "${source}" = action-checkout ] || fail "scanner was not loaded from the separate Action checkout"
+          done
+          for revision in "${REPO_ACTION_REVISION}" "${CLEAN_ACTION_REVISION}" "${FINDING_ACTION_REVISION}" "${INCOMPLETE_ACTION_REVISION}"; do
+            [ "${revision}" = "${EXPECTED_ACTION_SHA}" ] || fail "Action revision did not match the reviewed full commit SHA"
+          done
+          echo "External consumer trial assertions passed. Advisory findings and incomplete scans still require human review."
+
+      - name: Record the exact reviewed Action revision
+        if: always()
+        env:
+          ACTION_SHA: afc7e65d6723029c22935f82c7fc9562d5831565
+        run: |
+          {
+            echo "### MergeLatch external consumer trial"
+            echo
+            echo "Action source: \`MergeLatch/mergelatch@${ACTION_SHA}\`"
+            echo
+            echo "The checkout is a separate disposable consumer repository. Findings and incomplete scans remain advisory, never proof of safety or an enforcement gate."
+          } >> "${GITHUB_STEP_SUMMARY}"
