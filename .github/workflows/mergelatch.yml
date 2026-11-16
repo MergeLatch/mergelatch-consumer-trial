@@ -24,23 +24,23 @@ jobs:
 
       - name: Scan the real consumer repository
         id: repository
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
 
       - name: Scan the inert clean fixture
         id: clean
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: fixtures/clean
 
       - name: Scan the inert write-all fixture
         id: finding
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: fixtures/finding
 
       - name: Scan the inert malformed fixture
         id: incomplete
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: fixtures/incomplete
 
@@ -60,20 +60,20 @@ jobs:
       - name: Scan a nested clean fixture with unavailable revision (expected failure)
         id: unverified_clean
         continue-on-error: true
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: trial-unverified-clean
 
       - name: Scan a nested finding fixture with unavailable revision (expected failure)
         id: unverified_finding
         continue-on-error: true
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: trial-unverified-finding
 
       - name: Assert that advisory outcomes and Action provenance match
         env:
-          EXPECTED_ACTION_SHA: c5296cef5fd3ffc36f1b8f0649e6491050606275
+          EXPECTED_ACTION_SHA: 8d62e430257e858132e3354b65d1d4e5b49d1b53
           EXPECTED_MERGE_SHA: ${{ github.sha }}
           REPO_STATUS: ${{ steps.repository.outputs.status }}
           REPO_EXIT: ${{ steps.repository.outputs.scanner-exit-code }}
@@ -170,7 +170,7 @@ jobs:
       # its fake processes by their working directory, not only by PIDs it collected.
       - name: Consumer verify F-08 process-tree timeout (pinned Action helper)
         env:
-          ACTION_SHA: c5296cef5fd3ffc36f1b8f0649e6491050606275
+          ACTION_SHA: 8d62e430257e858132e3354b65d1d4e5b49d1b53
           HELPER_SHA256: 6d6620ad6f69056684bb0c8265caf03829a6074e78f5a07efed39ba8935d1970
         run: |
           set -euo pipefail
@@ -356,7 +356,7 @@ jobs:
       - name: Record the exact reviewed Action revision
         if: always()
         env:
-          ACTION_SHA: c5296cef5fd3ffc36f1b8f0649e6491050606275
+          ACTION_SHA: 8d62e430257e858132e3354b65d1d4e5b49d1b53
         run: |
           {
             echo "### MergeLatch external consumer trial"
