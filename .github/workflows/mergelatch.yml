@@ -13,7 +13,7 @@ jobs:
   external-consumer:
     name: SHA-pinned advisory consumer
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -24,23 +24,23 @@ jobs:
 
       - name: Scan the real consumer repository
         id: repository
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
 
       - name: Scan the inert clean fixture
         id: clean
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: fixtures/clean
 
       - name: Scan the inert write-all fixture
         id: finding
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: fixtures/finding
 
       - name: Scan the inert malformed fixture
         id: incomplete
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: fixtures/incomplete
 
@@ -60,20 +60,20 @@ jobs:
       - name: Scan a nested clean fixture with unavailable revision (expected failure)
         id: unverified_clean
         continue-on-error: true
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: trial-unverified-clean
 
       - name: Scan a nested finding fixture with unavailable revision (expected failure)
         id: unverified_finding
         continue-on-error: true
-        uses: MergeLatch/mergelatch@c5296cef5fd3ffc36f1b8f0649e6491050606275
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
         with:
           scan-directory: trial-unverified-finding
 
       - name: Assert that advisory outcomes and Action provenance match
         env:
-          EXPECTED_ACTION_SHA: c5296cef5fd3ffc36f1b8f0649e6491050606275
+          EXPECTED_ACTION_SHA: 8d62e430257e858132e3354b65d1d4e5b49d1b53
           EXPECTED_MERGE_SHA: ${{ github.sha }}
           REPO_STATUS: ${{ steps.repository.outputs.status }}
           REPO_EXIT: ${{ steps.repository.outputs.scanner-exit-code }}
@@ -170,7 +170,7 @@ jobs:
       # its fake processes by their working directory, not only by PIDs it collected.
       - name: Consumer verify F-08 process-tree timeout (pinned Action helper)
         env:
-          ACTION_SHA: c5296cef5fd3ffc36f1b8f0649e6491050606275
+          ACTION_SHA: 8d62e430257e858132e3354b65d1d4e5b49d1b53
           HELPER_SHA256: 6d6620ad6f69056684bb0c8265caf03829a6074e78f5a07efed39ba8935d1970
         run: |
           set -euo pipefail
@@ -353,15 +353,232 @@ jobs:
           if pgrep -f "sleep 3607" > /dev/null; then fail "the cleanup probe left a fake build process running"; fi
           echo "Cleanup probe: failed early as intended and left no fake build process running."
 
+      # D-3. Controlled check of bounded scanner reports from external consumer:
+      # Scans generated workflow fixtures (text only; never executed). Verifies the 1000 findings
+      # cap and 500 incomplete entries cap at exact boundaries, advisory outcome status, and
+      # exact SHA provenance.
+      - name: Generate D-3 bounded-report fixtures (text only; nothing in them is run)
+        run: |
+          set -euo pipefail
+          python3 -I - <<'PY'
+          import pathlib
+          def make(name, steps, extra=None, gaps=0):
+              wf = pathlib.Path(name) / ".github" / "workflows"
+              wf.mkdir(parents=True, exist_ok=True)
+              body = "".join("      - uses: example/tool@v%d\n" % i for i in range(steps))
+              for i in range(gaps):
+                  (wf / ("broken-%04d.yml" % i)).write_text("a: [unclosed\n")
+              if not steps:
+                  return
+              (wf / "ci.yml").write_text("on: pull_request\npermissions:\n  contents: read\njobs:\n  b:\n    steps:\n" + body)
+              if extra:
+                  (wf / "broken.yml").write_text(extra)
+          make("scan-below", 100)
+          make("scan-exact", 1000)
+          make("scan-over", 1001)
+          make("scan-old", 10000)
+          make("scan-mixed", 1500, "a: [unclosed\n")
+          make("scan-gaps499", 0, None, 499)
+          make("scan-gaps500", 0, None, 500)
+          make("scan-gaps501", 0, None, 501)
+          PY
+
+      - name: "D-3: 100 unpinned steps"
+        id: d3_below
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
+        with:
+          scan-directory: scan-below
+
+      - name: "D-3: 1000 unpinned steps"
+        id: d3_exact
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
+        with:
+          scan-directory: scan-exact
+
+      - name: "D-3: 1001 unpinned steps"
+        id: d3_over
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
+        with:
+          scan-directory: scan-over
+
+      - name: "D-3: 10000 unpinned steps"
+        id: d3_old
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
+        with:
+          scan-directory: scan-old
+
+      - name: "D-3: 1500 unpinned steps plus malformed file"
+        id: d3_mixed
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
+        with:
+          scan-directory: scan-mixed
+
+      - name: "D-3: 499 invalid workflow files"
+        id: d3_gaps499
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
+        with:
+          scan-directory: scan-gaps499
+
+      - name: "D-3: 500 invalid workflow files"
+        id: d3_gaps500
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
+        with:
+          scan-directory: scan-gaps500
+
+      - name: "D-3: 501 invalid workflow files"
+        id: d3_gaps501
+        continue-on-error: true
+        uses: MergeLatch/mergelatch@8d62e430257e858132e3354b65d1d4e5b49d1b53
+        with:
+          scan-directory: scan-gaps501
+
+      - name: Assert D-3 bounded-report outcomes and provenance
+        if: always()
+        env:
+          EXPECTED_ACTION_SHA: 8d62e430257e858132e3354b65d1d4e5b49d1b53
+          BELOW_OUTCOME: ${{ steps.d3_below.outcome }}
+          BELOW_STATUS: ${{ steps.d3_below.outputs.status }}
+          BELOW_FINDINGS: ${{ steps.d3_below.outputs.findings-count }}
+          BELOW_INCOMPLETE: ${{ steps.d3_below.outputs.incomplete-count }}
+          BELOW_EXIT: ${{ steps.d3_below.outputs.scanner-exit-code }}
+          BELOW_SOURCE: ${{ steps.d3_below.outputs.scanner-source }}
+          BELOW_PINNED: ${{ steps.d3_below.outputs.action-pinned }}
+          BELOW_REVISION: ${{ steps.d3_below.outputs.action-revision }}
+          BELOW_CHECK: ${{ steps.d3_below.outputs.revision-check }}
+
+          EXACT_OUTCOME: ${{ steps.d3_exact.outcome }}
+          EXACT_STATUS: ${{ steps.d3_exact.outputs.status }}
+          EXACT_FINDINGS: ${{ steps.d3_exact.outputs.findings-count }}
+          EXACT_INCOMPLETE: ${{ steps.d3_exact.outputs.incomplete-count }}
+          EXACT_EXIT: ${{ steps.d3_exact.outputs.scanner-exit-code }}
+          EXACT_SOURCE: ${{ steps.d3_exact.outputs.scanner-source }}
+          EXACT_PINNED: ${{ steps.d3_exact.outputs.action-pinned }}
+          EXACT_REVISION: ${{ steps.d3_exact.outputs.action-revision }}
+          EXACT_CHECK: ${{ steps.d3_exact.outputs.revision-check }}
+
+          OVER_OUTCOME: ${{ steps.d3_over.outcome }}
+          OVER_STATUS: ${{ steps.d3_over.outputs.status }}
+          OVER_FINDINGS: ${{ steps.d3_over.outputs.findings-count }}
+          OVER_INCOMPLETE: ${{ steps.d3_over.outputs.incomplete-count }}
+          OVER_EXIT: ${{ steps.d3_over.outputs.scanner-exit-code }}
+          OVER_SOURCE: ${{ steps.d3_over.outputs.scanner-source }}
+          OVER_PINNED: ${{ steps.d3_over.outputs.action-pinned }}
+          OVER_REVISION: ${{ steps.d3_over.outputs.action-revision }}
+          OVER_CHECK: ${{ steps.d3_over.outputs.revision-check }}
+
+          OLD_OUTCOME: ${{ steps.d3_old.outcome }}
+          OLD_STATUS: ${{ steps.d3_old.outputs.status }}
+          OLD_FINDINGS: ${{ steps.d3_old.outputs.findings-count }}
+          OLD_INCOMPLETE: ${{ steps.d3_old.outputs.incomplete-count }}
+          OLD_EXIT: ${{ steps.d3_old.outputs.scanner-exit-code }}
+          OLD_SOURCE: ${{ steps.d3_old.outputs.scanner-source }}
+          OLD_PINNED: ${{ steps.d3_old.outputs.action-pinned }}
+          OLD_REVISION: ${{ steps.d3_old.outputs.action-revision }}
+          OLD_CHECK: ${{ steps.d3_old.outputs.revision-check }}
+
+          MIXED_OUTCOME: ${{ steps.d3_mixed.outcome }}
+          MIXED_STATUS: ${{ steps.d3_mixed.outputs.status }}
+          MIXED_FINDINGS: ${{ steps.d3_mixed.outputs.findings-count }}
+          MIXED_INCOMPLETE: ${{ steps.d3_mixed.outputs.incomplete-count }}
+          MIXED_EXIT: ${{ steps.d3_mixed.outputs.scanner-exit-code }}
+          MIXED_SOURCE: ${{ steps.d3_mixed.outputs.scanner-source }}
+          MIXED_PINNED: ${{ steps.d3_mixed.outputs.action-pinned }}
+          MIXED_REVISION: ${{ steps.d3_mixed.outputs.action-revision }}
+          MIXED_CHECK: ${{ steps.d3_mixed.outputs.revision-check }}
+
+          GAPS499_OUTCOME: ${{ steps.d3_gaps499.outcome }}
+          GAPS499_STATUS: ${{ steps.d3_gaps499.outputs.status }}
+          GAPS499_FINDINGS: ${{ steps.d3_gaps499.outputs.findings-count }}
+          GAPS499_INCOMPLETE: ${{ steps.d3_gaps499.outputs.incomplete-count }}
+          GAPS499_EXIT: ${{ steps.d3_gaps499.outputs.scanner-exit-code }}
+          GAPS499_SOURCE: ${{ steps.d3_gaps499.outputs.scanner-source }}
+          GAPS499_PINNED: ${{ steps.d3_gaps499.outputs.action-pinned }}
+          GAPS499_REVISION: ${{ steps.d3_gaps499.outputs.action-revision }}
+          GAPS499_CHECK: ${{ steps.d3_gaps499.outputs.revision-check }}
+
+          GAPS500_OUTCOME: ${{ steps.d3_gaps500.outcome }}
+          GAPS500_STATUS: ${{ steps.d3_gaps500.outputs.status }}
+          GAPS500_FINDINGS: ${{ steps.d3_gaps500.outputs.findings-count }}
+          GAPS500_INCOMPLETE: ${{ steps.d3_gaps500.outputs.incomplete-count }}
+          GAPS500_EXIT: ${{ steps.d3_gaps500.outputs.scanner-exit-code }}
+          GAPS500_SOURCE: ${{ steps.d3_gaps500.outputs.scanner-source }}
+          GAPS500_PINNED: ${{ steps.d3_gaps500.outputs.action-pinned }}
+          GAPS500_REVISION: ${{ steps.d3_gaps500.outputs.action-revision }}
+          GAPS500_CHECK: ${{ steps.d3_gaps500.outputs.revision-check }}
+
+          GAPS501_OUTCOME: ${{ steps.d3_gaps501.outcome }}
+          GAPS501_STATUS: ${{ steps.d3_gaps501.outputs.status }}
+          GAPS501_FINDINGS: ${{ steps.d3_gaps501.outputs.findings-count }}
+          GAPS501_INCOMPLETE: ${{ steps.d3_gaps501.outputs.incomplete-count }}
+          GAPS501_EXIT: ${{ steps.d3_gaps501.outputs.scanner-exit-code }}
+          GAPS501_SOURCE: ${{ steps.d3_gaps501.outputs.scanner-source }}
+          GAPS501_PINNED: ${{ steps.d3_gaps501.outputs.action-pinned }}
+          GAPS501_REVISION: ${{ steps.d3_gaps501.outputs.action-revision }}
+          GAPS501_CHECK: ${{ steps.d3_gaps501.outputs.revision-check }}
+        run: |
+          set -euo pipefail
+          {
+            echo '### D-3: bounded scanner report verification (external consumer)'
+            echo
+            echo '| Fixture | Step Outcome | Status | Findings Count | Incomplete Count | Scanner Exit | Provenance | Revision Check |'
+            echo '|---|---|---|---|---|---|---|---|'
+            echo "| below (100) | ${BELOW_OUTCOME} | ${BELOW_STATUS} | ${BELOW_FINDINGS} | ${BELOW_INCOMPLETE} | ${BELOW_EXIT} | ${BELOW_SOURCE} (pinned=${BELOW_PINNED}) | ${BELOW_CHECK} |"
+            echo "| exact (1000) | ${EXACT_OUTCOME} | ${EXACT_STATUS} | ${EXACT_FINDINGS} | ${EXACT_INCOMPLETE} | ${EXACT_EXIT} | ${EXACT_SOURCE} (pinned=${EXACT_PINNED}) | ${EXACT_CHECK} |"
+            echo "| over (1001) | ${OVER_OUTCOME} | ${OVER_STATUS} | ${OVER_FINDINGS} | ${OVER_INCOMPLETE} | ${OVER_EXIT} | ${OVER_SOURCE} (pinned=${OVER_PINNED}) | ${OVER_CHECK} |"
+            echo "| old (10000) | ${OLD_OUTCOME} | ${OLD_STATUS} | ${OLD_FINDINGS} | ${OLD_INCOMPLETE} | ${OLD_EXIT} | ${OLD_SOURCE} (pinned=${OLD_PINNED}) | ${OLD_CHECK} |"
+            echo "| mixed (1500) | ${MIXED_OUTCOME} | ${MIXED_STATUS} | ${MIXED_FINDINGS} | ${MIXED_INCOMPLETE} | ${MIXED_EXIT} | ${MIXED_SOURCE} (pinned=${MIXED_PINNED}) | ${MIXED_CHECK} |"
+            echo "| gaps499 (499 files) | ${GAPS499_OUTCOME} | ${GAPS499_STATUS} | ${GAPS499_FINDINGS} | ${GAPS499_INCOMPLETE} | ${GAPS499_EXIT} | ${GAPS499_SOURCE} (pinned=${GAPS499_PINNED}) | ${GAPS499_CHECK} |"
+            echo "| gaps500 (500 files) | ${GAPS500_OUTCOME} | ${GAPS500_STATUS} | ${GAPS500_FINDINGS} | ${GAPS500_INCOMPLETE} | ${GAPS500_EXIT} | ${GAPS500_SOURCE} (pinned=${GAPS500_PINNED}) | ${GAPS500_CHECK} |"
+            echo "| gaps501 (501 files) | ${GAPS501_OUTCOME} | ${GAPS501_STATUS} | ${GAPS501_FINDINGS} | ${GAPS501_INCOMPLETE} | ${GAPS501_EXIT} | ${GAPS501_SOURCE} (pinned=${GAPS501_PINNED}) | ${GAPS501_CHECK} |"
+          } | tee -a "${GITHUB_STEP_SUMMARY}"
+
+          fail() { echo "::error title=External consumer D-3 trial::$1"; exit 1; }
+          expect() { # name got wanted
+            [ "$2" = "$3" ] || fail "$1: got $2, wanted $3"
+          }
+
+          expect below "${BELOW_OUTCOME}/${BELOW_STATUS}/${BELOW_FINDINGS}/${BELOW_INCOMPLETE}/${BELOW_EXIT}" success/findings/100/0/1
+          expect exact "${EXACT_OUTCOME}/${EXACT_STATUS}/${EXACT_FINDINGS}/${EXACT_INCOMPLETE}/${EXACT_EXIT}" success/findings/1000/0/1
+          expect over "${OVER_OUTCOME}/${OVER_STATUS}/${OVER_FINDINGS}/${OVER_INCOMPLETE}/${OVER_EXIT}" success/incomplete/1000/1/2
+          expect old "${OLD_OUTCOME}/${OLD_STATUS}/${OLD_FINDINGS}/${OLD_INCOMPLETE}/${OLD_EXIT}" success/incomplete/1000/1/2
+          expect mixed "${MIXED_OUTCOME}/${MIXED_STATUS}/${MIXED_FINDINGS}/${MIXED_INCOMPLETE}/${MIXED_EXIT}" success/incomplete/1000/2/2
+          expect gaps499 "${GAPS499_OUTCOME}/${GAPS499_STATUS}/${GAPS499_FINDINGS}/${GAPS499_INCOMPLETE}/${GAPS499_EXIT}" success/incomplete/0/499/2
+          expect gaps500 "${GAPS500_OUTCOME}/${GAPS500_STATUS}/${GAPS500_FINDINGS}/${GAPS500_INCOMPLETE}/${GAPS500_EXIT}" success/incomplete/0/500/2
+          expect gaps501 "${GAPS501_OUTCOME}/${GAPS501_STATUS}/${GAPS501_FINDINGS}/${GAPS501_INCOMPLETE}/${GAPS501_EXIT}" success/incomplete/0/500/2
+
+          for src in "${BELOW_SOURCE}" "${EXACT_SOURCE}" "${OVER_SOURCE}" "${OLD_SOURCE}" "${MIXED_SOURCE}" "${GAPS499_SOURCE}" "${GAPS500_SOURCE}" "${GAPS501_SOURCE}"; do
+            [ "${src}" = action-checkout ] || fail "D-3 scanner was not loaded from action-checkout (${src})"
+          done
+          for pin in "${BELOW_PINNED}" "${EXACT_PINNED}" "${OVER_PINNED}" "${OLD_PINNED}" "${MIXED_PINNED}" "${GAPS499_PINNED}" "${GAPS500_PINNED}" "${GAPS501_PINNED}"; do
+            [ "${pin}" = true ] || fail "D-3 Action was not SHA-pinned"
+          done
+          for rev in "${BELOW_REVISION}" "${EXACT_REVISION}" "${OVER_REVISION}" "${OLD_REVISION}" "${MIXED_REVISION}" "${GAPS499_REVISION}" "${GAPS500_REVISION}" "${GAPS501_REVISION}"; do
+            [ "${rev}" = "${EXPECTED_ACTION_SHA}" ] || fail "D-3 Action revision mismatch: ${rev}"
+          done
+          for chk in "${BELOW_CHECK}" "${EXACT_CHECK}" "${OVER_CHECK}" "${OLD_CHECK}" "${MIXED_CHECK}" "${GAPS499_CHECK}" "${GAPS500_CHECK}" "${GAPS501_CHECK}"; do
+            [ "${chk}" = matches-merge ] || fail "D-3 revision check mismatch: ${chk}"
+          done
+
+          echo "External consumer D-3 bounded-report assertions passed completely."
+
       - name: Record the exact reviewed Action revision
         if: always()
         env:
-          ACTION_SHA: c5296cef5fd3ffc36f1b8f0649e6491050606275
+          ACTION_SHA: 8d62e430257e858132e3354b65d1d4e5b49d1b53
         run: |
           {
             echo "### MergeLatch external consumer trial"
             echo
             echo "Action source: \`MergeLatch/mergelatch@${ACTION_SHA}\`"
+            echo
+            echo "Verified D-2 fail-closed revisions, F-08 process-tree timeout cleanup, and D-3 bounded-report cap behaviors."
             echo
             echo "The checkout is a separate disposable consumer repository. Findings and incomplete scans remain advisory, never proof of safety or an enforcement gate."
           } >> "${GITHUB_STEP_SUMMARY}"
